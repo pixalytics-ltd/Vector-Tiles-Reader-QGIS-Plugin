@@ -1,8 +1,12 @@
 import itertools
-from math import floor
+import math
+from math import floor, ceil
 from typing import Callable, List, Optional, Tuple, TypeVar
 
 from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsPointXY, QgsProject
+# Messages
+from qgis.core import Qgis
+from qgis.core import QgsMessageLog
 
 from .global_map_tiles import GlobalMercator
 from .log_helper import debug
@@ -158,8 +162,13 @@ def convert_coordinate(source_crs: StrOrInt, target_crs: StrOrInt, lat: float, l
     crs_src = QgsCoordinateReferenceSystem(source_crs)
     crs_dest = QgsCoordinateReferenceSystem(target_crs)
     xform = QgsCoordinateTransform(crs_src, crs_dest, QgsProject.instance())
+    QgsMessageLog.logMessage("CRS conversion, In: {} Out: {} Lon: {:.3f} Lat: {:.3f}".format(source_crs,target_crs,float(lng),float(lat)), tag="Vector Tiles Reader", level=Qgis.Info)
+    try:
+        x, y = xform.transform(QgsPointXY(lng, lat))
+    except: # Handle infinity
+        x, y = xform.transform(QgsPointXY(lng-0.001, lat-0.001))
+    QgsMessageLog.logMessage("CRS conversion, In: {} Out: {} Lon: {:.3f} Lat: {:.3f} x: {:.3f} y: {:.3f}".format(source_crs,target_crs,float(lng),float(lat),x,y), tag="Vector Tiles Reader", level=Qgis.Info)
 
-    x, y = xform.transform(QgsPointXY(lng, lat))
     return x, y
 
 
@@ -227,10 +236,11 @@ def get_tile_bounds(
 
 def get_all_tiles(bounds: Bounds, is_cancel_requested_handler: Callable) -> List[Tuple[int, int]]:
     tiles = []
-    width = bounds.width()
-    height = bounds.height()
+    width = ceil(bounds.width())
+    height = ceil(bounds.height())
     x_min = bounds.x_min()
     y_min = bounds.y_min()
+    QgsMessageLog.logMessage("Preprocessing, Width: {} Height: {}".format(width,height), tag="Vector Tiles Reader", level=Qgis.Info)
     debug("Preprocessing {} tiles", width * height)
     for x in range(width):
         if is_cancel_requested_handler():
